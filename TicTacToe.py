@@ -1,6 +1,6 @@
 #-*-coding:utf-8-*-
+# programming: shuijingoj
 
-import tkinter as tk
 import os
 import time 
 from copy import deepcopy
@@ -12,7 +12,7 @@ def Evaluate(player, chessboard):
     # 己方达到胜利：1000，对方达到胜利：-1000
     # 单棋子占有某行、列、对角线：10
     # 双棋子占有某行、列、对角线：50
-    score = 0    
+    score = 0
     if player=='O':
         score_dict = {1:10, 2:50, 3:1000, 30:-1000}     # 圈玩家局面得分映射
     else:
@@ -45,12 +45,15 @@ def MinMaxGameTree(player, chessboard, strategy='max', max_depth=-1):
             continue
         next_chessboard = deepcopy(chessboard)
         if player=='O':   # 模拟下子
-            next_chessboard[pos]= 1 if strategy=='max' else 10    
+            next_chessboard[pos]= 1 if strategy=='max' else 10    # player执圈时，max层模拟自己下子记1，min层模拟对方下子记10
         else:
             next_chessboard[pos]= 10 if strategy=='max' else 1  
-        if 0 not in next_chessboard or max_depth==0:    # 棋盘已满，或达到最大搜索深度
+        if 0 not in next_chessboard:    # 棋盘已满
             scores.append((pos, Evaluate(player, next_chessboard)))
             return scores
+        elif max_depth==0:  # 达到最大搜索深度
+            scores.append((pos, Evaluate(player, next_chessboard)))
+            continue
         elif strategy == 'max': # max方
             if Evaluate(player, next_chessboard)>=1000: # 已达到胜利条件
                 scores.append((pos, Evaluate(player, next_chessboard)))
@@ -67,6 +70,56 @@ def MinMaxGameTree(player, chessboard, strategy='max', max_depth=-1):
                 children_scores = MinMaxGameTree(player, next_chessboard, 'max', (max_depth-1 if max_depth!=-1 else -1)) # 未达到胜利条件，向前推演
                 children_scores.sort(key=lambda x:x[1], reverse=True)  # 选出子局面极大方所有得分中最大的一个，作为当前着点最终得分 
                 scores.append((pos, children_scores[0][1]))
+    return scores
+
+def AlphaBetaGameTree(player, chessboard, strategy='max', max_depth=-1, alpha=-9999, beta=9999):
+    # MinMax博弈树推演，带AlphaBeta剪枝，裁剪不必要的推理分支
+    scores = []
+    for pos in range(len(chessboard)):  # 求所有子局面终局得分
+        if chessboard[pos] != 0:   # 已有棋子，不能选为着点
+            continue
+        next_chessboard = deepcopy(chessboard)
+        if player=='O':   # 模拟下子
+            next_chessboard[pos]= 1 if strategy=='max' else 10    # player执圈时，max层模拟自己下子记1，min层模拟对方下子记10
+        else:
+            next_chessboard[pos]= 10 if strategy=='max' else 1          
+        s = Evaluate(player, next_chessboard)  # 求当前子局面评分
+
+        if strategy == 'max': # max方
+            if 0 not in next_chessboard or max_depth==0 or s>=1000:    # 棋盘已满、达到最大搜索深度，或已胜利
+                alpha = s if alpha < s else alpha  
+                if alpha > beta:  # 剪枝
+                    return
+                else:    
+                    scores.append((pos,s))
+            else:
+                children_scores = AlphaBetaGameTree(player, next_chessboard, 'min', (max_depth-1 if max_depth!=-1 else -1), alpha, beta) # 未达到胜利条件，向前推演
+                if children_scores:  # 该分支未被裁剪
+                    children_scores.sort(key=lambda x:x[1], reverse=False)  # 选出子局面极小方所有得分中最小的一个，作为当前着点最终得分 
+                    s = children_scores[0][1]
+                    alpha = s if alpha < s else alpha
+                    if alpha > beta:
+                        return
+                    else:
+                        scores.append((pos, s))
+                
+        elif strategy == 'min':
+            if 0 not in next_chessboard or max_depth==0 or s<0:  # min方
+                beta = s if beta > s else beta  
+                if alpha > beta:  # 剪枝
+                    return
+                else:    
+                    scores.append((pos,s))
+            else:  
+                children_scores = AlphaBetaGameTree(player, next_chessboard, 'max', (max_depth-1 if max_depth!=-1 else -1), alpha, beta) # 未达到胜利条件，向前推演
+                if children_scores:  # 该分支未被裁剪
+                    children_scores.sort(key=lambda x:x[1], reverse=True)  # 选出子局面极大方所有得分中最大的一个，作为当前着点最终得分 
+                    s = children_scores[0][1]
+                    beta = s if beta > s else beta
+                    if alpha > beta:
+                        return
+                    else:
+                        scores.append((pos, s))
     return scores
 
 def GameOver(chessboard):
@@ -97,6 +150,7 @@ def Printchessboard(chessboard):
 
 def main():
     chessboard = [0]*9
+    AI_algorithm = AlphaBetaGameTree
     first_side = int(input('Please choose the first side: 1.Plyaer(○) 2.Computer(X): ')) # 选择先手方，玩家执圈，计算机执X
     while(first_side not in (1,2)):
         print('You should input 1 or 2 to choose the first side.')
@@ -104,7 +158,7 @@ def main():
     if first_side == 2:   # 计算机先手，先下一子
         player = 'X'
         computer = 'O'
-        candidates = MinMaxGameTree(computer, chessboard, 'max')  # 候选着点及得分列表
+        candidates = AI_algorithm(computer, chessboard, 'max')  # 候选着点及得分列表
         candidates.sort(key=lambda x:x[1], reverse=True) # 按终局得分排序
         computer_next = candidates[0][0]
         chessboard[computer_next] = 1
@@ -124,7 +178,7 @@ def main():
         if GameOver(chessboard):
             break
 
-        candidates = MinMaxGameTree(computer, chessboard, 'max')  # 候选着点及得分列表
+        candidates = AI_algorithm(computer, chessboard, 'max')  # 候选着点及得分列表
         candidates.sort(key=lambda x:x[1], reverse=True) # 按终局得分排序
         computer_next = candidates[0][0]
         chessboard[computer_next] = 1 if computer == 'O' else 10
